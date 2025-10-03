@@ -1,0 +1,21 @@
+# BLACK BOX LLM Service - Python Dependencies
+
+# TensorRT (installed via system packages on Jetson)
+# tensorrt==8.6.2
+
+# PyTorch (compatible with Jetson)
+# torch==2.0.1
+
+# Transformers and model utilities
+transformers==4.35.0
+accelerate==0.24.0
+sentencepiece==0.1.99
+protobuf==3.20.3
+
+# Core dependencies
+numpy==1.24.3
+pydantic==2.5.0
+
+# Utilities
+python-json-logger==2.0.7
+

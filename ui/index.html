@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BLACK BOX Assistant</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1 class="title">BLACK BOX</h1>
+            <div class="status-indicator" id="status">
+                <span class="status-dot"></span>
+                <span class="status-text">Ready</span>
+            </div>
+        </header>
+
+        <!-- Main Interaction Area -->
+        <main class="main-content">
+            <!-- Voice Interaction -->
+            <section class="interaction-section">
+                <button 
+                    id="voice-button" 
+                    class="voice-button" 
+                    aria-label="Press to speak">
+                    <svg class="microphone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" y1="19" x2="12" y2="23"></line>
+                        <line x1="8" y1="23" x2="16" y2="23"></line>
+                    </svg>
+                    <span class="button-text">PRESS TO SPEAK</span>
+                </button>
+                
+                <div class="interaction-feedback" id="feedback">
+                    <p class="feedback-text" id="feedback-text">Press the button and speak your request</p>
+                </div>
+            </section>
+
+            <!-- Transcription Display -->
+            <section class="transcription-section" id="transcription-section" style="display: none;">
+                <h2 class="section-title">You said:</h2>
+                <p class="transcription-text" id="transcription-text"></p>
+            </section>
+
+            <!-- Response Display -->
+            <section class="response-section" id="response-section" style="display: none;">
+                <h2 class="section-title">Response:</h2>
+                <p class="response-text" id="response-text"></p>
+            </section>
+
+            <!-- Quick Actions -->
+            <section class="quick-actions">
+                <h2 class="section-title">Quick Actions</h2>
+                <div class="action-buttons">
+                    <button class="action-button" onclick="handleQuickAction('reminders')">
+                        <span class="action-icon">📅</span>
+                        <span class="action-label">MY REMINDERS</span>
+                    </button>
+                    <button class="action-button" onclick="handleQuickAction('media')">
+                        <span class="action-icon">🎵</span>
+                        <span class="action-label">PLAY MUSIC</span>
+                    </button>
+                    <button class="action-button" onclick="handleQuickAction('vault')">
+                        <span class="action-icon">🔒</span>
+                        <span class="action-label">SECURE VAULT</span>
+                    </button>
+                    <button class="action-button" onclick="handleQuickAction('time')">
+                        <span class="action-icon">🕐</span>
+                        <span class="action-label">WHAT TIME IS IT?</span>
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer with System Info -->
+        <footer class="footer">
+            <div class="system-info">
+                <span id="thermal-status" class="info-item">🌡️ Normal</span>
+                <span id="uptime" class="info-item">⏱️ System Ready</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Processing...</p>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal" id="confirmation-modal" style="display: none;">
+        <div class="modal-content">
+            <h2 class="modal-title" id="modal-title">Success</h2>
+            <p class="modal-message" id="modal-message"></p>
+            <div class="modal-buttons">
+                <button class="modal-button modal-button-success" onclick="closeModal()">
+                    OK
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+

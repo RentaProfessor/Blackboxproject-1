@@ -1,0 +1,113 @@
+# BLACK BOX - Git Ignore
+
+# Environment and secrets
+.env
+*.key
+*.pem
+*.secret
+
+# Database
+data/*.db
+data/*.db-*
+*.sqlite
+*.sqlite3
+
+# Backups
+backups/
+*.backup
+
+# Logs
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Model files (large)
+*.onnx
+*.bin
+*.gguf
+*.pt
+*.pth
+*.safetensors
+*.engine
+llm-service/models/engines/
+llm-service/models/weights/
+asr-service/models/
+tts-service/models/
+
+# Docker
+.dockerignore
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Audio test files
+*.wav
+*.mp3
+*.ogg
+*.flac
+
+# OS
+Thumbs.db
+.DS_Store
+._*
+
+# Build artifacts
+*.o
+*.a
+*.dll
+*.so
+*.dylib
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Test files
+test_audio/
+test_results/
+*.test
+
+# Documentation builds
+docs/_build/
+site/
+

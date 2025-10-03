@@ -1,0 +1,36 @@
+# BLACK BOX Orchestrator - Python Dependencies
+
+# FastAPI and ASGI server
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Database (SQLCipher)
+sqlcipher3==0.5.2
+sqlalchemy==2.0.23
+
+# Security
+argon2-cffi==23.1.0
+cryptography==41.0.7
+
+# IPC and async
+aiofiles==23.2.1
+asyncio==3.4.3
+
+# Monitoring and logging
+psutil==5.9.6
+python-json-logger==2.0.7
+
+# Audio processing
+numpy==1.26.2
+soundfile==0.12.1
+
+# HTTP client for service communication
+httpx==0.25.2
+aiohttp==3.9.1
+
+# Utilities
+python-multipart==0.0.6
+python-dotenv==1.0.0
+

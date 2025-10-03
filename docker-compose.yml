@@ -1,0 +1,317 @@
+version: '3.8'
+
+# ============================================================================
+# BLACK BOX Project - Docker Compose Configuration
+# ============================================================================
+# This file defines all 5 core services with mandatory configurations:
+# - restart: always (resilience requirement)
+# - GPU passthrough via NVIDIA runtime
+# - Shared memory IPC (no TCP networking between services)
+# - ALSA audio device passthrough
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # 1. TensorRT-LLM Inference Service
+  # ==========================================================================
+  llm-service:
+    build:
+      context: ./llm-service
+      dockerfile: Dockerfile
+    image: blackbox/llm-service:latest
+    container_name: blackbox-llm
+    restart: always
+    
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - LLM_MODEL=${LLM_MODEL:-llama-3.2-3b}
+      - LLM_ENGINE_PATH=${LLM_ENGINE_PATH}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-150}
+      - LLM_TARGET_TPS=${LLM_TARGET_TPS:-25}
+      - LLM_GPU_MEMORY=${LLM_GPU_MEMORY:-4096}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    
+    volumes:
+      # Model storage (persistent)
+      - ./llm-service/models:/models:ro
+      # Shared memory for IPC (tmpfs for speed)
+      - type: tmpfs
+        target: /dev/shm
+        tmpfs:
+          size: 512m
+      # Logs
+      - ./logs/llm:/var/log/blackbox
+    
+    # Shared memory IPC (not exposed to host)
+    ipc: shareable
+    
+    healthcheck:
+      test: ["CMD", "python", "/app/healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ==========================================================================
+  # 2. Whisper.cpp ASR Service
+  # ==========================================================================
+  asr-service:
+    build:
+      context: ./asr-service
+      dockerfile: Dockerfile
+    image: blackbox/asr-service:latest
+    container_name: blackbox-asr
+    restart: always
+    
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - ASR_MODEL=${ASR_MODEL:-tiny.en}
+      - ASR_MODEL_PATH=${ASR_MODEL_PATH}
+      - ASR_TIMEOUT_SECONDS=${ASR_TIMEOUT_SECONDS:-2.5}
+      - ASR_LANGUAGE=${ASR_LANGUAGE:-en}
+      - ASR_SAMPLE_RATE=${ASR_SAMPLE_RATE:-16000}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    
+    volumes:
+      # Model storage
+      - ./asr-service/models:/models:ro
+      # Shared memory for IPC
+      - type: tmpfs
+        target: /dev/shm
+        tmpfs:
+          size: 256m
+      # Logs
+      - ./logs/asr:/var/log/blackbox
+    
+    # ALSA audio input device
+    devices:
+      - ${ALSA_INPUT_DEVICE:-/dev/snd}:/dev/snd
+    
+    ipc: shareable
+    
+    healthcheck:
+      test: ["CMD", "python", "/app/healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ==========================================================================
+  # 3. Piper TTS Service (Warm Start)
+  # ==========================================================================
+  tts-service:
+    build:
+      context: ./tts-service
+      dockerfile: Dockerfile
+    image: blackbox/tts-service:latest
+    container_name: blackbox-tts
+    restart: always
+    
+    environment:
+      - TTS_VOICE=${TTS_VOICE:-en_US-lessac-medium}
+      - TTS_MODEL_PATH=${TTS_MODEL_PATH}
+      - TTS_TIMEOUT_SECONDS=${TTS_TIMEOUT_SECONDS:-1.5}
+      - TTS_SAMPLE_RATE=${TTS_SAMPLE_RATE:-22050}
+      - TTS_STREAM_CHUNK_SIZE=${TTS_STREAM_CHUNK_SIZE:-1024}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    
+    volumes:
+      # Model storage
+      - ./tts-service/models:/models:ro
+      # Shared memory for IPC
+      - type: tmpfs
+        target: /dev/shm
+        tmpfs:
+          size: 256m
+      # Logs
+      - ./logs/tts:/var/log/blackbox
+    
+    # ALSA audio output device
+    devices:
+      - ${ALSA_OUTPUT_DEVICE:-/dev/snd}:/dev/snd
+    
+    ipc: shareable
+    
+    # Warm start: keep model loaded
+    command: ["python", "/app/server.py", "--preload"]
+    
+    healthcheck:
+      test: ["CMD", "python", "/app/healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ==========================================================================
+  # 4. FastAPI Orchestrator (Main Controller)
+  # ==========================================================================
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    image: blackbox/orchestrator:latest
+    container_name: blackbox-orchestrator
+    restart: always
+    
+    environment:
+      - ORCHESTRATOR_HOST=${ORCHESTRATOR_HOST:-0.0.0.0}
+      - ORCHESTRATOR_PORT=${ORCHESTRATOR_PORT:-8000}
+      - ORCHESTRATOR_WORKERS=${ORCHESTRATOR_WORKERS:-1}
+      - ORCHESTRATOR_TOTAL_TIMEOUT=${ORCHESTRATOR_TOTAL_TIMEOUT:-13.0}
+      - IPC_METHOD=${IPC_METHOD:-shared_memory}
+      - DATABASE_ENCRYPTION_KEY=${DATABASE_ENCRYPTION_KEY}
+      - DATABASE_PATH=${DATABASE_PATH:-/data/blackbox.db}
+      - CONTEXT_MAX_MESSAGES=${CONTEXT_MAX_MESSAGES:-10}
+      - CONTEXT_MAX_TOKENS=${CONTEXT_MAX_TOKENS:-2048}
+      - THERMAL_WARNING_TEMP=${THERMAL_WARNING_TEMP:-75}
+      - THERMAL_CRITICAL_TEMP=${THERMAL_CRITICAL_TEMP:-85}
+      - THERMAL_COOLDOWN_TEMP=${THERMAL_COOLDOWN_TEMP:-70}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - METRICS_ENABLED=${METRICS_ENABLED:-true}
+      - TIMING_LOGS=${TIMING_LOGS:-true}
+    
+    volumes:
+      # Database storage (persistent, encrypted)
+      - ./data:/data
+      # Shared memory for IPC
+      - type: tmpfs
+        target: /dev/shm
+        tmpfs:
+          size: 512m
+      # Thermal monitoring
+      - /sys/devices/virtual/thermal:/sys/devices/virtual/thermal:ro
+      - /sys/class/thermal:/sys/class/thermal:ro
+      # Logs
+      - ./logs/orchestrator:/var/log/blackbox
+      # Backups
+      - ./backups:/backups
+      # Scripts
+      - ./scripts:/app/scripts
+    
+    ports:
+      - "${ORCHESTRATOR_PORT:-8000}:8000"
+    
+    # Connect to other services via shared memory IPC
+    ipc: service:llm-service
+    
+    depends_on:
+      - llm-service
+      - asr-service
+      - tts-service
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  # ==========================================================================
+  # 5. Chromium Kiosk UI
+  # ==========================================================================
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    image: blackbox/ui:latest
+    container_name: blackbox-ui
+    restart: always
+    
+    environment:
+      - UI_PORT=${UI_PORT:-3000}
+      - UI_FULLSCREEN=${UI_FULLSCREEN:-true}
+      - UI_DISABLE_SCREENSAVER=${UI_DISABLE_SCREENSAVER:-true}
+      - ORCHESTRATOR_URL=http://orchestrator:8000
+      - UI_PRIMARY_COLOR=${UI_PRIMARY_COLOR:-#2E7D32}
+      - UI_DANGER_COLOR=${UI_DANGER_COLOR:-#C62828}
+      - UI_BACKGROUND_COLOR=${UI_BACKGROUND_COLOR:-#FAFAFA}
+      - UI_TEXT_COLOR=${UI_TEXT_COLOR:-#212121}
+      - UI_FONT_SIZE_BASE=${UI_FONT_SIZE_BASE:-18px}
+      - UI_FONT_SIZE_HEADING=${UI_FONT_SIZE_HEADING:-24px}
+      - UI_BUTTON_HEIGHT=${UI_BUTTON_HEIGHT:-80px}
+    
+    volumes:
+      # X11 socket for display
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      # Logs
+      - ./logs/ui:/var/log/blackbox
+    
+    ports:
+      - "${UI_PORT:-3000}:3000"
+    
+    depends_on:
+      - orchestrator
+    
+    # Display configuration
+    environment:
+      - DISPLAY=:0
+    
+    # Privileged for X11 access
+    privileged: true
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+# Note: We use the default bridge network for minimal overhead
+# Inter-service communication primarily uses shared memory IPC
+# ============================================================================
+
+networks:
+  default:
+    driver: bridge
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+volumes:
+  # Persistent data storage
+  data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data
+  
+  # Backup storage
+  backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./backups
+  
+  # Log storage
+  logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./logs
+

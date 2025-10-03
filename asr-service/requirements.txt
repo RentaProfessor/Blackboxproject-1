@@ -1,0 +1,12 @@
+# BLACK BOX ASR Service - Python Dependencies
+
+# Audio processing
+numpy==1.24.3
+soundfile==0.12.1
+
+# Utilities
+pydantic==2.5.0
+python-json-logger==2.0.7
+
+# Whisper.cpp Python bindings (installed from source in Dockerfile)
+
