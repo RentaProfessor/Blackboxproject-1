@@ -303,27 +303,97 @@ rm -rf /root/.cache/* 2>/dev/null || true
 log_success "System cleanup completed - freed significant CPU cycles and memory"
 
 # ============================================================================
-# 2. Dependencies Installation
+# 2. System Hardening & Dependencies (Robust Installation)
 # ============================================================================
 
-log_info "Installing essential dependencies..."
+log_info "Starting robust system hardening and dependency installation..."
 
-# Update package lists
+# =========================================================
+# 2.1 DNS Resolution Fix (Bypasses "Temporary Resolving Issue")
+# =========================================================
+log_info "Implementing DNS resolution fix..."
+
+# Set Google DNS and lock the file to prevent overwrites
+echo "nameserver 8.8.8.8" | tee /etc/resolv.conf
+echo "nameserver 8.8.4.4" | tee -a /etc/resolv.conf
+chattr +i /etc/resolv.conf 2>/dev/null || true
+
+log_success "DNS resolution fixed with Google DNS (8.8.8.8)"
+
+# =========================================================
+# 2.2 Repository Cleanup and Swap (Bypasses "Ignored Index Files")
+# =========================================================
+log_info "Backing up existing repository configuration..."
+
+# Create backup directory
+BACKUP_DIR="/tmp/apt-backup-$(date +%s)"
+mkdir -p "$BACKUP_DIR"
+
+# Backup existing repository files
+cp /etc/apt/sources.list "$BACKUP_DIR/sources.list.backup" 2>/dev/null || true
+cp -r /etc/apt/sources.list.d "$BACKUP_DIR/sources.list.d.backup" 2>/dev/null || true
+
+log_success "Repository configuration backed up to $BACKUP_DIR"
+
+log_info "Creating clean repository configuration..."
+
+# Detect Ubuntu version for appropriate repository
+UBUNTU_VERSION=$(lsb_release -cs 2>/dev/null || echo "focal")
+UBUNTU_CODENAME=$(lsb_release -cs 2>/dev/null || echo "focal")
+
+# Create minimal, clean sources.list
+cat > /etc/apt/sources.list << EOF
+# Clean Ubuntu repository configuration
+deb http://us.archive.ubuntu.com/ubuntu/ ${UBUNTU_CODENAME} main restricted universe multiverse
+deb http://us.archive.ubuntu.com/ubuntu/ ${UBUNTU_CODENAME}-updates main restricted universe multiverse
+deb http://us.archive.ubuntu.com/ubuntu/ ${UBUNTU_CODENAME}-security main restricted universe multiverse
+EOF
+
+# Clear the sources.list.d directory to avoid conflicts
+rm -rf /etc/apt/sources.list.d/* 2>/dev/null || true
+
+log_success "Clean repository configuration created"
+
+log_info "Clearing corrupted package cache..."
+
+# Clear corrupted cache
+rm -rf /var/lib/apt/lists/*
+apt-get clean
+
+log_success "Package cache cleared"
+
+# =========================================================
+# 2.3 Core Tool Installation and Dependency Repair
+# =========================================================
+log_info "Updating package lists with clean repositories..."
 apt-get update
 
-# Install essential tools
+log_info "Fixing broken package dependencies..."
+apt-get --fix-broken install -y
+
+log_info "Installing essential utilities including nano..."
+
+# Install all essential utilities including the previously missing nano
 apt-get install -y \
     git \
-    docker.io \
-    docker-compose-plugin \
     wget \
     curl \
     build-essential \
+    nano \
+    docker.io \
+    docker-compose \
     python3-pip \
     alsa-utils \
     v4l-utils \
     dkms \
     linux-headers-$(uname -r)
+
+log_success "Essential tools installed successfully"
+
+# =========================================================
+# 2.4 Docker Configuration
+# =========================================================
+log_info "Configuring Docker..."
 
 # Enable and start Docker
 systemctl enable docker
@@ -334,7 +404,35 @@ if [ -n "$SUDO_USER" ]; then
     usermod -aG docker "$SUDO_USER"
 fi
 
-log_success "Dependencies installed"
+log_success "Docker configured and started"
+
+# =========================================================
+# 2.5 Repository Restore (The Final Correction)
+# =========================================================
+log_info "Restoring original repository configuration..."
+
+# Restore original sources.list
+if [ -f "$BACKUP_DIR/sources.list.backup" ]; then
+    cp "$BACKUP_DIR/sources.list.backup" /etc/apt/sources.list
+    log_success "Original sources.list restored"
+fi
+
+# Restore original sources.list.d
+if [ -d "$BACKUP_DIR/sources.list.d.backup" ]; then
+    rm -rf /etc/apt/sources.list.d/*
+    cp -r "$BACKUP_DIR/sources.list.d.backup"/* /etc/apt/sources.list.d/ 2>/dev/null || true
+    log_success "Original sources.list.d restored"
+fi
+
+# Clean up backup directory
+rm -rf "$BACKUP_DIR"
+
+log_success "Repository configuration restored - system ready for future updates"
+
+# CRITICAL: DO NOT run apt update after restore to avoid re-introducing errors
+log_info "Skipping apt update after restore to maintain system stability"
+
+log_success "System hardening and dependencies installation completed"
 
 # ============================================================================
 # 3. System Hardening and Resource Optimization
@@ -342,7 +440,7 @@ log_success "Dependencies installed"
 
 log_info "Applying system hardening and resource optimization..."
 
-# 2.1-2.4 System Configuration (using existing script)
+# 3.1-3.4 System Configuration (using existing script)
 log_info "Running comprehensive system configuration..."
 
 if [ -f "$PROJECT_ROOT/system/setup-jetson.sh" ]; then
@@ -420,7 +518,7 @@ log_success "System hardening complete"
 
 log_info "Starting LLM engine compilation (this will take 30-60 minutes)..."
 
-# 3.1 TRT-LLM Tooling Setup
+# 4.1 TRT-LLM Tooling Setup
 log_info "Setting up TensorRT-LLM compilation environment..."
 
 # Clone jetson-containers for TRT-LLM support
@@ -439,7 +537,7 @@ if [ -f "scripts/install_build_dependencies.sh" ]; then
     log_success "Build dependencies installed"
 fi
 
-# 3.2 Engine Build
+# 4.2 Engine Build
 log_info "Building TensorRT-LLM engine..."
 
 # Return to project directory
@@ -467,7 +565,7 @@ fi
 
 log_info "Deploying containers and activating services..."
 
-# 4.1 Build & Run Containers
+# 5.1 Build & Run Containers
 log_info "Building Docker containers..."
 docker-compose build
 
@@ -482,7 +580,7 @@ sleep 30
 log_info "Checking service status..."
 docker-compose ps
 
-# 4.2 Systemd Integration
+# 5.2 Systemd Integration
 log_info "Installing systemd service..."
 
 if [ -f "$PROJECT_ROOT/system/blackbox.service" ]; then
@@ -500,7 +598,7 @@ else
     log_warning "Systemd service file not found"
 fi
 
-# 4.3 BrosTrend Driver Install
+# 5.3 BrosTrend Driver Install
 log_info "Installing BrosTrend AC1200 WiFi driver..."
 
 # Check if internet is available
