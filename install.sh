@@ -77,8 +77,233 @@ echo "BLACK BOX Installation started at $(date)" > "$LOG_FILE"
 
 log_info "Starting BLACK BOX deployment..."
 
+# =========================================================
+# PHASE 0: NVMe OS MIGRATION (CRITICAL FOR PERFORMANCE/STABILITY)
+# Goal: Ensure the root filesystem is on the high-speed NVMe SSD (/dev/nvme0n1p1)
+# NOTE: This is a mandatory pre-step added due to performance requirements.
+# =========================================================
+echo "--- 🔍 PHASE 0: NVMe RootFS Check ---"
+
+# Check if the root filesystem is currently mounted on the NVMe partition
+if df / | grep -q "/dev/nvme0n1p1"; then
+    echo "✅ SUCCESS: System is already booting from NVMe. Proceeding to original installation steps."
+else
+    echo "⚠️ WARNING: System is booting from microSD. Initiating mandatory migration to NVMe..."
+
+    # Check for NVMe presence
+    if ! lsblk | grep -q "nvme0n1"; then
+        echo "❌ ERROR: NVMe SSD not detected. Please install the SSD and verify hardware connections."
+        exit 1
+    fi
+
+    # Step A: Partition and Format the NVMe (Wipes ALL existing data on /dev/nvme0n1)
+    echo "--- Step A: Partitioning and Formatting /dev/nvme0n1 ---"
+    sudo parted -s /dev/nvme0n1 mklabel gpt
+    sudo parted -s /dev/nvme0n1 mkpart primary ext4 0% 100%
+    sudo mkfs.ext4 -F /dev/nvme0n1p1
+    echo "Partitioning and formatting complete."
+
+    # Step B: Copy the Operating System
+    echo "--- Step B: Copying OS from microSD to NVMe. This will take several minutes... ---"
+    sudo mkdir -p /mnt/nvme_root
+    sudo mount /dev/nvme0n1p1 /mnt/nvme_root
+    # rsync copies the entire OS, excluding non-essential live system files
+    sudo rsync -aAXv --exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","/mnt/*","/media/*","/lost+found"} / /mnt/nvme_root
+    sudo umount /mnt/nvme_root
+    echo "OS copy complete."
+
+    # Step C: Mandatory Manual Intervention and Reboot
+    echo ""
+    echo "==================================================================="
+    echo "🛑 CRITICAL MANUAL INTERVENTION REQUIRED (ONE-TIME STEP) 🛑"
+    echo "You MUST manually switch the boot target to the NVMe SSD."
+    echo "==================================================================="
+    echo "1. Run the following command NOW:"
+    echo "   sudo nano /boot/extlinux/extlinux.conf"
+    echo ""
+    echo "2. Find the line starting with 'APPEND' and change the root device:"
+    echo "   Change: root=/dev/mmcblk0p1  -->  To: root=/dev/nvme0n1p1"
+    echo ""
+    echo "3. Save (Ctrl+X, Y, Enter) and exit nano."
+    echo ""
+    echo "4. After saving, run 'sudo reboot' to boot from the NVMe."
+    echo ""
+    echo "AFTER THE REBOOT, RUN 'sudo ./install.sh' AGAIN TO CONTINUE THE SETUP."
+    exit 0 # Exit the script here, waiting for the user to reboot.
+fi
+# =========================================================
+# END OF PHASE 0
+
 # ============================================================================
-# 1. Dependencies Installation
+# 1. System Cleanup and Package Removal
+# ============================================================================
+
+log_info "Performing system cleanup to free CPU cycles and memory..."
+
+# Stop and remove any existing Docker containers and images
+log_info "Cleaning up existing Docker installations..."
+if command -v docker &> /dev/null; then
+    # Stop all running containers
+    docker stop $(docker ps -aq) 2>/dev/null || true
+    # Remove all containers
+    docker rm $(docker ps -aq) 2>/dev/null || true
+    # Remove all images
+    docker rmi $(docker images -q) 2>/dev/null || true
+    # Remove all volumes
+    docker volume prune -f 2>/dev/null || true
+    # Remove all networks
+    docker network prune -f 2>/dev/null || true
+    log_success "Docker cleanup completed"
+fi
+
+# Remove unnecessary packages that consume CPU cycles
+log_info "Removing unnecessary packages to free system resources..."
+
+# Remove GUI packages if they exist
+apt-get remove -y --purge \
+    ubuntu-desktop \
+    ubuntu-desktop-minimal \
+    ubuntu-gnome-desktop \
+    gnome-shell \
+    gnome-session \
+    gdm3 \
+    lightdm \
+    xorg \
+    xserver-xorg \
+    xserver-xorg-core \
+    xserver-xorg-video-all \
+    xserver-xorg-input-all \
+    x11-common \
+    x11-utils \
+    x11-xserver-utils \
+    x11-apps \
+    x11-session-utils \
+    x11-common \
+    x11-utils \
+    x11-xserver-utils \
+    x11-apps \
+    x11-session-utils \
+    2>/dev/null || true
+
+# Remove development packages that aren't needed for runtime
+apt-get remove -y --purge \
+    python3-dev \
+    python3-pip \
+    python3-setuptools \
+    python3-wheel \
+    build-essential \
+    gcc \
+    g++ \
+    make \
+    cmake \
+    pkg-config \
+    libc6-dev \
+    libssl-dev \
+    libffi-dev \
+    libbz2-dev \
+    libreadline-dev \
+    libsqlite3-dev \
+    libncurses5-dev \
+    libncursesw5-dev \
+    xz-utils \
+    tk-dev \
+    libxml2-dev \
+    libxmlsec1-dev \
+    libffi-dev \
+    liblzma-dev \
+    2>/dev/null || true
+
+# Remove multimedia packages that aren't needed
+apt-get remove -y --purge \
+    vlc \
+    totem \
+    rhythmbox \
+    brasero \
+    cheese \
+    shotwell \
+    gimp \
+    libreoffice* \
+    firefox \
+    chromium-browser \
+    thunderbird \
+    evolution \
+    2>/dev/null || true
+
+# Remove games and entertainment packages
+apt-get remove -y --purge \
+    gnome-games \
+    aisleriot \
+    gnome-mahjongg \
+    gnome-mines \
+    gnome-sudoku \
+    gnome-tetravex \
+    hitori \
+    iagno \
+    lightsoff \
+    quadrapassel \
+    swell-foop \
+    tali \
+    2>/dev/null || true
+
+# Remove documentation and help packages
+apt-get remove -y --purge \
+    ubuntu-docs \
+    gnome-user-docs \
+    gnome-help \
+    yelp \
+    man-db \
+    manpages \
+    manpages-dev \
+    manpages-posix \
+    manpages-posix-dev \
+    2>/dev/null || true
+
+# Remove language packs (keep only English)
+apt-get remove -y --purge \
+    language-pack-* \
+    language-pack-gnome-* \
+    $(dpkg -l | grep -E '^ii.*language-pack' | awk '{print $2}') \
+    2>/dev/null || true
+
+# Remove unnecessary fonts
+apt-get remove -y --purge \
+    fonts-* \
+    $(dpkg -l | grep -E '^ii.*fonts-' | awk '{print $2}') \
+    2>/dev/null || true
+
+# Clean up package cache
+apt-get autoremove -y
+apt-get autoclean
+apt-get clean
+
+# Remove old kernels (keep only current and one previous)
+log_info "Cleaning up old kernels..."
+OLD_KERNELS=$(dpkg -l | grep -E '^ii.*linux-image-[0-9]' | grep -v $(uname -r) | awk '{print $2}' | head -n -1)
+if [ -n "$OLD_KERNELS" ]; then
+    apt-get remove -y --purge $OLD_KERNELS
+    log_success "Removed old kernels: $OLD_KERNELS"
+fi
+
+# Clean up log files
+log_info "Cleaning up log files..."
+find /var/log -type f -name "*.log" -mtime +7 -delete 2>/dev/null || true
+find /var/log -type f -name "*.gz" -delete 2>/dev/null || true
+journalctl --vacuum-time=7d 2>/dev/null || true
+
+# Clean up temporary files
+log_info "Cleaning up temporary files..."
+rm -rf /tmp/* 2>/dev/null || true
+rm -rf /var/tmp/* 2>/dev/null || true
+
+# Clean up user caches
+log_info "Cleaning up user caches..."
+rm -rf /home/*/.cache/* 2>/dev/null || true
+rm -rf /root/.cache/* 2>/dev/null || true
+
+log_success "System cleanup completed - freed significant CPU cycles and memory"
+
+# ============================================================================
+# 2. Dependencies Installation
 # ============================================================================
 
 log_info "Installing essential dependencies..."
@@ -112,7 +337,7 @@ fi
 log_success "Dependencies installed"
 
 # ============================================================================
-# 2. System Hardening and Resource Optimization
+# 3. System Hardening and Resource Optimization
 # ============================================================================
 
 log_info "Applying system hardening and resource optimization..."
@@ -190,7 +415,7 @@ fi
 log_success "System hardening complete"
 
 # ============================================================================
-# 3. LLM Engine Compilation (The Longest Step)
+# 4. LLM Engine Compilation (The Longest Step)
 # ============================================================================
 
 log_info "Starting LLM engine compilation (this will take 30-60 minutes)..."
@@ -237,7 +462,7 @@ else
 fi
 
 # ============================================================================
-# 4. Container Deployment and Service Activation
+# 5. Container Deployment and Service Activation
 # ============================================================================
 
 log_info "Deploying containers and activating services..."
@@ -300,7 +525,7 @@ fi
 log_success "Container deployment complete"
 
 # ============================================================================
-# 5. Final Security and User Instructions
+# 6. Final Security and User Instructions
 # ============================================================================
 
 echo ""
