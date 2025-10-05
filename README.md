@@ -328,24 +328,71 @@ sudo systemctl set-default multi-user.target
 
 ---
 
+## 🛠️ Scripts and Automation
+
+### Comprehensive Script Suite
+
+The BLACK BOX project includes a complete set of scripts for deployment, maintenance, and troubleshooting:
+
+**Master Scripts**:
+- **`PDF_INSTALLATION_GUIDE.md`**: Complete PDF-guided installation (4-5 hours)
+- **`verify-install.sh`**: Installation verification and health checks
+- **`Makefile`**: Convenient commands for daily operations
+
+**Build Scripts**:
+- **`llm-service/build-trtllm.sh`**: TensorRT-LLM engine compilation
+- **`asr-service/build-whisper.sh`**: GPU-accelerated Whisper build
+
+**Configuration Scripts**:
+- **`system/setup-jetson.sh`**: Jetson-specific system optimization
+- **`scripts/init_vault_setup.py`**: Database and vault initialization
+
+**Service Scripts**:
+- **`ui/start-ui.sh`**: Chromium kiosk UI launcher
+- **`system/blackbox.service`**: Systemd service configuration
+
+### Quick Commands
+
+```bash
+# Complete deployment (follow PDF_INSTALLATION_GUIDE.md)
+# See PDF_INSTALLATION_GUIDE.md for step-by-step instructions
+
+# Daily operations
+make start          # Start all services
+make status         # Check service status
+make logs           # View logs
+make health         # System health check
+make backup         # Database backup
+
+# Verification
+./verify-install.sh # Comprehensive system check
+```
+
+### Script Documentation
+
+For detailed information about all scripts, their usage, dependencies, and troubleshooting, see:
+**📖 [SCRIPT_README.md](SCRIPT_README.md)** - Complete scripts documentation
+
+---
+
 ## 🚀 Deployment Architecture and Installation
 
 ### Prerequisites Checklist
 - [ ] NVIDIA Jetson Orin Nano (8GB) ready
 - [ ] NVMe SSD installed and formatted
 - [ ] USB hub and peripherals connected
-- [ ] JetPack SDK installed
+- [ ] JetPack 6.0 SD card (flashed and ready)
 - [ ] Internet connection (for initial setup only)
 
-### Installation Script Features
-The `install.sh` script performs comprehensive system optimization:
+### Installation Approach
+BLACK BOX uses a **PDF-guided installation** for maximum reliability:
 
-1. **System Cleanup**: Removes unnecessary packages to free CPU cycles
-2. **Dependencies**: Installs essential tools and Docker
-3. **System Hardening**: Configures power mode, disables GUI, sets up SWAP
-4. **LLM Compilation**: Builds TensorRT-LLM engine (30-60 minutes)
-5. **Container Deployment**: Builds and starts all services
-6. **Service Integration**: Configures systemd for auto-start
+1. **PDF Foundation**: Follow the PDF Jetson setup guide (Phases 1-3)
+2. **BLACK BOX Optimizations**: Apply performance tuning after PDF Phase 3
+3. **Service Deployment**: Deploy BLACK BOX containers and services
+4. **Final Configuration**: Initialize database and enable auto-start
+
+**📖 See [PDF_INSTALLATION_GUIDE.md](PDF_INSTALLATION_GUIDE.md) for complete step-by-step instructions.**
 
 ---
 
@@ -466,58 +513,51 @@ BLACK-BOX-PROJECT/
 
 ## IX. Quick Start (After Hardware Setup)
 
-**NEW: Single Command Deployment**
+**PDF-Guided Installation (Recommended)**
 
 ```bash
-# 1. Clone repository
+# 1. Follow PDF Installation Guide
+# See PDF_INSTALLATION_GUIDE.md for complete steps
+
+# 2. After PDF Phases 1-3, apply BLACK BOX optimizations:
+sudo nvpmodel -m 0                    # 15W power mode
+sudo systemctl set-default multi-user.target  # Disable GUI
+sudo fallocate -l 16G /swapfile       # Create 16GB SWAP
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo "/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab
+
+# 3. Continue with PDF Phases 4-6, then deploy BLACK BOX:
 cd /opt
 git clone <repository-url> blackbox
 cd blackbox
-
-# 2. Run master installation script (does everything)
-sudo ./install.sh
-
-# 3. Reboot and initialize
-sudo reboot
-# After reboot:
-docker-compose exec orchestrator python3 /app/scripts/init_vault_setup.py --master-password 'YOUR_SECURE_PASSWORD'
-
-# 4. Test system
-curl http://localhost:8000/health
-# Open browser: http://localhost:3000
-```
-
-**Alternative: Manual Setup**
-
-```bash
-# 1. Clone repository
-cd /opt
-git clone <repository-url> blackbox
-cd blackbox
-
-# 2. Run system configuration
-sudo ./system/setup-jetson.sh
-
-# 3. Configure environment
-cp .env.example .env
-nano .env  # Edit configuration
 
 # 4. Build TensorRT-LLM engine (one-time, ~30 minutes)
 cd llm-service
 ./build-trtllm.sh
+cd ..
 
 # 5. Start all services
-cd /opt/blackbox
 docker-compose up -d
 
-# 6. Verify services
-docker-compose ps
-docker-compose logs -f
+# 6. Initialize database
+docker-compose exec orchestrator python3 /app/scripts/init_vault_setup.py --master-password 'YOUR_SECURE_PASSWORD'
 
 # 7. Enable auto-start
-sudo systemctl enable blackbox
-sudo systemctl start blackbox
+sudo cp system/blackbox.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable blackbox.service
+
+# 8. Reboot and verify
+sudo reboot
+# After reboot:
+docker-compose ps
+curl http://localhost:8000/health
+./verify-install.sh
 ```
+
+**📖 For detailed step-by-step instructions, see [PDF_INSTALLATION_GUIDE.md](PDF_INSTALLATION_GUIDE.md)**
 
 ---
 
@@ -571,6 +611,9 @@ See `docs/TROUBLESHOOTING.md` for:
 
 ### Monitoring Commands
 ```bash
+# Comprehensive system check
+./verify-install.sh
+
 # Service status
 docker-compose ps
 
@@ -662,6 +705,7 @@ make backup
 
 ### Complete Documentation Suite
 - **README.md**: This comprehensive reference document
+- **SCRIPT_README.md**: Complete scripts documentation and usage guide
 - **QUICKSTART.md**: Rapid deployment guide
 - **DEPLOYMENT.md**: Detailed setup instructions
 - **TROUBLESHOOTING.md**: Common issues and solutions
@@ -677,11 +721,12 @@ make backup
 5. **Community**: GitHub issues and discussions
 
 ### Getting Help
-1. Check documentation (README, DEPLOYMENT, TROUBLESHOOTING)
+1. Check documentation (README, SCRIPT_README, DEPLOYMENT, TROUBLESHOOTING)
 2. Review logs: `docker-compose logs`
 3. Run diagnostics: `make status && make health`
-4. Consult TROUBLESHOOTING.md for common issues
-5. Create GitHub issue for bugs or feature requests
+4. Use verification script: `./verify-install.sh`
+5. Consult TROUBLESHOOTING.md for common issues
+6. Create GitHub issue for bugs or feature requests
 
 ---
 
@@ -709,10 +754,11 @@ The BLACK BOX project is **complete and ready for production deployment** on NVI
 ### Next Steps for User
 
 1. **Review README.md** for complete overview
-2. **Follow QUICKSTART.md** for rapid deployment
-3. **Reference DEPLOYMENT.md** for detailed setup
-4. **Use TROUBLESHOOTING.md** if issues arise
-5. **Consult PERFORMANCE.md** for optimization
+2. **Read SCRIPT_README.md** for detailed script documentation
+3. **Follow QUICKSTART.md** for rapid deployment
+4. **Reference DEPLOYMENT.md** for detailed setup
+5. **Use TROUBLESHOOTING.md** if issues arise
+6. **Consult PERFORMANCE.md** for optimization
 
 ### Project Confidence Level
 
